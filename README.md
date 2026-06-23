@@ -21,13 +21,6 @@ This document describes the full architecture, infrastructure setup, bugs encoun
 9. [Project Structure](#9-project-structure)
 
 ---
-inovatech-sasi/
-└── docs/
-    ├── openstack-instance.png
-    ├── network-topology.png
-    ├── security-groups.png
-    └── sasi-net.png
----
     
 ## 1. Project Overview
 
@@ -108,10 +101,11 @@ Piper and Whisper communicate using the Wyoming protocol, a lightweight binary p
 
 ---
 
-### 3. OpenStack Infrastructure
+## 3. OpenStack Infrastructure
 
 This section documents the full OpenStack provisioning process for sasi-1, including network design, instance configuration, and security group analysis. These decisions are directly relevant to cloud infrastructure security and are presented with that lens in mind.
-3.1 Project Isolation
+
+### 3.1 Project Isolation
 
 The university OpenStack cluster is organized into isolated projects. SASI runs inside Caio_BETA, separate from the shared Inovatech project used for common lab tools. Project isolation is enforced at the API level by Keystone, the OpenStack identity service. Each project has its own quota, network namespace, and security group rules — a misconfiguration inside Caio_BETA cannot directly affect other projects, and other lab members have no access to sasi-1 by default.
 OpenStack Project	Purpose
@@ -142,6 +136,7 @@ The disk volume is attached at /dev/sda. The instance uses restart: unless-stopp
 
 The network was designed with two layers: a university-wide provider network and a project-specific private subnet connected through a router.
 ![OpenStack network topology](docs/network-topology.png)
+```
 public-net  [192.168.201.0/24]   ← university internal provider network
        |
    [sasilink]                    ← router created for this project
@@ -152,6 +147,7 @@ sasi-net    [10.0.0.0/24]        ← private project subnet (MTU 1450)
    sasi-1
    10.0.0.230  (private)
    192.168.201.133  (floating IP, NAT from public-net)
+```
 
 The floating IP 192.168.201.133 is a NAT mapping managed by OpenStack Neutron. When a packet arrives at 192.168.201.133, Neutron translates it to 10.0.0.230 before it reaches the VM. This is functionally equivalent to port forwarding on a home router, but managed at the hypervisor level.
 ![sasi-net details](docs/sasi-net.png)
