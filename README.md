@@ -185,18 +185,20 @@ The author is aware that the more correct rule would restrict SSH ingress to spe
 Planned hardening:
 
 ### replace current SSH rule (source 0.0.0.0/0) with:
-ALLOW IPv4 22/tcp from <developer_workstation_ip>/32
-ALLOW IPv4 22/tcp from <lab_admin_ip>/32
+```
+# replace current SSH rule (source 0.0.0.0/0) with:
+# ALLOW IPv4 22/tcp from <developer_workstation_ip>/32
+# ALLOW IPv4 22/tcp from <lab_admin_ip>/32
+```
 
 ### 3.5 SSH Access
-bash
-
+```bash
 ssh -i ~/.ssh/inovatech-key ubuntu@192.168.201.133
-### -i: specifies the private key file for authentication
-### ubuntu: default user on Ubuntu cloud images
-### 192.168.201.133: floating IP, reachable only from inside the university network
-###                  or through WireGuard VPN (pending configuration)
-
+# -i: specifies the private key file for authentication
+# ubuntu: default user on Ubuntu cloud images
+# 192.168.201.133: floating IP, reachable only from inside the university network
+#                  or through WireGuard VPN (pending configuration)
+```
 The key pair inovatech-key was generated during instance creation via OpenStack Horizon and downloaded once. It is stored at ~/.ssh/inovatech-key on the developer's workstation with permissions 400 (owner read-only), which is required by the SSH client:
 bash
 
