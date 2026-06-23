@@ -150,7 +150,7 @@ sasi-net    [10.0.0.0/24]        ← private project subnet (MTU 1450)
 ```
 
 The floating IP 192.168.201.133 is a NAT mapping managed by OpenStack Neutron. When a packet arrives at 192.168.201.133, Neutron translates it to 10.0.0.230 before it reaches the VM. This is functionally equivalent to port forwarding on a home router, but managed at the hypervisor level.
-![sasi-net details](docs/sasi-net.png)
+
 The network sasi-net has the following properties:
 Field	Value
 Name	sasi-net
@@ -163,14 +163,18 @@ Admin state	UP
 
 The MTU of 1450 bytes (rather than the standard 1500) accounts for the overhead of the VXLAN encapsulation used by OpenStack Neutron to isolate tenant networks at the hypervisor level. Sending packets larger than 1450 bytes without fragmentation would cause silent packet loss.
 
+![sasi-net details](docs/sasi-net.png)
+
 ### 3.4 Security Groups
-![Security group rules](docs/security-groups.png)
+
 The instance is assigned to the security group sasi, which currently defines three rules:
 | Direction | Protocol | Port range | Source | Purpose |
 |---|---|---|---|---|
 | Egress | IPv4 / Any | Any | 0.0.0.0/0 | Allow all outbound traffic |
 | Egress | IPv6 / Any | Any | ::/0 | Allow all outbound IPv6 traffic |
 | Ingress | TCP | 22 (SSH) | 0.0.0.0/0 | Allow SSH from any source |
+
+![Security group rules](docs/security-groups.png)
 
 Security analysis. The egress rules allow unrestricted outbound traffic, which is necessary for the VM to reach the Groq API over the internet and to pull Docker images from external registries. Restricting egress to specific destinations (Groq API endpoints, Docker Hub, HuggingFace) would follow the principle of least privilege but adds operational complexity during active development.
 
