@@ -129,13 +129,14 @@ Image	ubuntu-server-cloudimg-24.04
 SSH key pair	inovatech-key
 Private IP	10.0.0.230 (sasi-net)
 Floating IP	192.168.201.133 (public-net)
-![sasi-1 instance overview](docs/openstack-instance.png)
 The disk volume is attached at /dev/sda. The instance uses restart: unless-stopped at the container level, meaning all Docker services recover automatically after a VM reboot without manual intervention.
 
-### 3.3 Network Topology
+![sasi-1 instance overview](docs/openstack-instance.png)
 
-The network was designed with two layers: a university-wide provider network and a project-specific private subnet connected through a router.
+### 3.3 Network Topology
 ![OpenStack network topology](docs/network-topology.png)
+The network was designed with two layers: a university-wide provider network and a project-specific private subnet connected through a router.
+
 ```
 public-net  [192.168.201.0/24]   ← university internal provider network
        |
