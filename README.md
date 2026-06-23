@@ -1,4 +1,4 @@
-# SASI — Sistema de Assistência e Suporte Inteligente
+# SASI: Sistema de Assistência e Suporte Inteligente
 
 **InovaTech Lab · Unipar Umuarama · Paraná, Brazil**
 
@@ -166,10 +166,11 @@ The MTU of 1450 bytes (rather than the standard 1500) accounts for the overhead 
 ### 3.4 Security Groups
 ![Security group rules](docs/security-groups.png)
 The instance is assigned to the security group sasi, which currently defines three rules:
-Direction	Protocol	Port range	Source	Purpose
-Egress	IPv4 / Any	Any	0.0.0.0/0	Allow all outbound traffic
-Egress	IPv6 / Any	Any	::/0	Allow all outbound IPv6 traffic
-Ingress	TCP	22 (SSH)	0.0.0.0/0	Allow SSH from any source
+| Direction | Protocol | Port range | Source | Purpose |
+|---|---|---|---|---|
+| Egress | IPv4 / Any | Any | 0.0.0.0/0 | Allow all outbound traffic |
+| Egress | IPv6 / Any | Any | ::/0 | Allow all outbound IPv6 traffic |
+| Ingress | TCP | 22 (SSH) | 0.0.0.0/0 | Allow SSH from any source |
 
 Security analysis. The egress rules allow unrestricted outbound traffic, which is necessary for the VM to reach the Groq API over the internet and to pull Docker images from external registries. Restricting egress to specific destinations (Groq API endpoints, Docker Hub, HuggingFace) would follow the principle of least privilege but adds operational complexity during active development.
 
