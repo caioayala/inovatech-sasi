@@ -12,15 +12,23 @@ This document describes the full architecture, infrastructure setup, bugs encoun
 
 1. [Project Overview](#1-project-overview)
 2. [Architecture](#2-architecture)
-3. [Infrastructure Setup](#3-infrastructure-setup)
-4. [Bugs Encountered and Solutions](#4-bugs-encountered-and-solutions)
-5. [Performance Benchmarks](#5-performance-benchmarks)
-6. [Security Decisions](#6-security-decisions)
-7. [Pending Implementation](#7-pending-implementation)
-8. [Project Structure](#8-project-structure)
+3. [OpenStack Infrastructure](#3-openstack-infrastructure)
+4. [Docker and Application Setup](#4-docker-and-application-setup)
+5. [Bugs Encountered and Solutions](#5-bugs-encountered-and-solutions)
+6. [Performance Benchmarks](#6-performance-benchmarks)
+7. [Security Decisions](#7-security-decisions)
+8. [Pending Implementation](#8-pending-implementation)
+9. [Project Structure](#9-project-structure)
 
 ---
-
+inovatech-sasi/
+└── docs/
+    ├── openstack-instance.png
+    ├── network-topology.png
+    ├── security-groups.png
+    └── sasi-net.png
+---
+    
 ## 1. Project Overview
 
 InovaTech Lab operates a server room with legacy hardware and a cluster of Chromebooks available for general use. The goal of SASI is to provide an intelligent interface for visitors and lab members to query information about equipment and personnel without requiring any technical knowledge. Interaction happens through a Dell touchscreen PC positioned at the lab entrance, equipped with an integrated microphone, speakers, and camera.
@@ -100,115 +108,99 @@ Piper and Whisper communicate using the Wyoming protocol, a lightweight binary p
 
 ---
 
-## 3. Infrastructure Setup
+### 3. OpenStack Infrastructure
 
-### 3.1 OpenStack Network Topology
+This section documents the full OpenStack provisioning process for sasi-1, including network design, instance configuration, and security group analysis. These decisions are directly relevant to cloud infrastructure security and are presented with that lens in mind.
+3.1 Project Isolation
 
-The university OpenStack cluster has a public network (`public-net`) in the range `192.168.201.0/24`. This is a private university network, not publicly routable on the internet. A project-specific private subnet (`sasi-net`, `10.0.0.0/24`) was created for SASI, connected to the public network through a router named `sasilink`.
+The university OpenStack cluster is organized into isolated projects. SASI runs inside Caio_BETA, separate from the shared Inovatech project used for common lab tools. Project isolation is enforced at the API level by Keystone, the OpenStack identity service. Each project has its own quota, network namespace, and security group rules — a misconfiguration inside Caio_BETA cannot directly affect other projects, and other lab members have no access to sasi-1 by default.
+OpenStack Project	Purpose
+Caio_BETA	SASI development (this project)
+Inovatech	Shared lab tools (GitLab, etc.)
+Otavio_BETA	Another lab member's personal project
 
-The instance `sasi-1` was assigned the private IP `10.0.0.230` and the floating IP `192.168.201.133`. Access is only possible from inside the university network. Remote access from outside requires a WireGuard VPN tunnel, which is pending configuration by the lab administrator.
+### 3.2 Instance Details
 
-An SSH key pair named `inovatech-key` was created during instance setup. The private key is stored locally and used for all SSH connections:
+The instance sasi-1 was created on June 11, 2026, using the Ubuntu Server cloud image (ubuntu-server-cloudimg-24.04). The flavor ai.caio.super was provisioned by the lab administrator specifically for this project.
+Field	Value
+Instance name	sasi-1
+Instance ID	67149fba-d31b-468f-943c-fb305d037789
+Status	Active
+Availability zone	nova
+Flavor	ai.caio.super
+RAM	32 GB
+vCPUs	8
+Disk	200 GB
+Image	ubuntu-server-cloudimg-24.04
+SSH key pair	inovatech-key
+Private IP	10.0.0.230 (sasi-net)
+Floating IP	192.168.201.133 (public-net)
+![sasi-1 instance overview](docs/openstack-instance.png)
+The disk volume is attached at /dev/sda. The instance uses restart: unless-stopped at the container level, meaning all Docker services recover automatically after a VM reboot without manual intervention.
 
-```bash
+### 3.3 Network Topology
+
+The network was designed with two layers: a university-wide provider network and a project-specific private subnet connected through a router.
+![OpenStack network topology](docs/network-topology.png)
+public-net  [192.168.201.0/24]   ← university internal provider network
+       |
+   [sasilink]                    ← router created for this project
+   (internal interface: 10.0.0.1)
+       |
+sasi-net    [10.0.0.0/24]        ← private project subnet (MTU 1450)
+       |
+   sasi-1
+   10.0.0.230  (private)
+   192.168.201.133  (floating IP, NAT from public-net)
+
+The floating IP 192.168.201.133 is a NAT mapping managed by OpenStack Neutron. When a packet arrives at 192.168.201.133, Neutron translates it to 10.0.0.230 before it reaches the VM. This is functionally equivalent to port forwarding on a home router, but managed at the hypervisor level.
+![sasi-net details](docs/sasi-net.png)
+The network sasi-net has the following properties:
+Field	Value
+Name	sasi-net
+CIDR	10.0.0.0/24
+Gateway	10.0.0.1 (sasilink router)
+MTU	1450
+Shared	No
+External	No
+Admin state	UP
+
+The MTU of 1450 bytes (rather than the standard 1500) accounts for the overhead of the VXLAN encapsulation used by OpenStack Neutron to isolate tenant networks at the hypervisor level. Sending packets larger than 1450 bytes without fragmentation would cause silent packet loss.
+
+### 3.4 Security Groups
+![Security group rules](docs/security-groups.png)
+The instance is assigned to the security group sasi, which currently defines three rules:
+Direction	Protocol	Port range	Source	Purpose
+Egress	IPv4 / Any	Any	0.0.0.0/0	Allow all outbound traffic
+Egress	IPv6 / Any	Any	::/0	Allow all outbound IPv6 traffic
+Ingress	TCP	22 (SSH)	0.0.0.0/0	Allow SSH from any source
+
+Security analysis. The egress rules allow unrestricted outbound traffic, which is necessary for the VM to reach the Groq API over the internet and to pull Docker images from external registries. Restricting egress to specific destinations (Groq API endpoints, Docker Hub, HuggingFace) would follow the principle of least privilege but adds operational complexity during active development.
+
+The ingress SSH rule accepts connections from 0.0.0.0/0, meaning any machine on the university network 192.168.201.0/24 can attempt an SSH connection to port 22. The current protection against unauthorized access relies entirely on key-based authentication: the inovatech-key private key is required, and password authentication is disabled on Ubuntu cloud images by default. Brute-force attacks against the key itself are computationally infeasible with a properly generated RSA or Ed25519 key pair.
+
+The author is aware that the more correct rule would restrict SSH ingress to specific source IPs (the developer's workstation and the lab administrator's machine). This hardening has not been implemented yet because the environment is controlled and access to the 192.168.201.0/24 network requires physical presence in the university building or VPN credentials managed by the lab administrator. Tightening the source IP restriction is listed as a planned security measure and will be applied once the WireGuard VPN is configured and stable IP assignments for authorized machines are known.
+
+Planned hardening:
+
+# replace current SSH rule (source 0.0.0.0/0) with:
+ALLOW IPv4 22/tcp from <developer_workstation_ip>/32
+ALLOW IPv4 22/tcp from <lab_admin_ip>/32
+
+### 3.5 SSH Access
+bash
+
 ssh -i ~/.ssh/inovatech-key ubuntu@192.168.201.133
-# -i: specifies the identity file (private key) to use for authentication
-```
+# -i: specifies the private key file for authentication
+# ubuntu: default user on Ubuntu cloud images
+# 192.168.201.133: floating IP, reachable only from inside the university network
+#                  or through WireGuard VPN (pending configuration)
 
-### 3.2 Docker Installation
+The key pair inovatech-key was generated during instance creation via OpenStack Horizon and downloaded once. It is stored at ~/.ssh/inovatech-key on the developer's workstation with permissions 400 (owner read-only), which is required by the SSH client:
+bash
 
-Docker was installed from the official Docker repository rather than the Ubuntu default packages, which tend to be outdated. The process involved adding the Docker GPG key and repository before installing:
-
-```bash
-# add Docker's official GPG key to the trusted keyring
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-# -fsSL: fail silently on errors (-f), suppress progress (-s), follow redirects (-L)
-# --dearmor: converts ASCII-armored GPG key to binary format
-
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-# add the repository to apt sources
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io \
-  docker-buildx-plugin docker-compose-plugin
-```
-
-After installation, the current user was added to the `docker` group to allow running Docker commands without `sudo`:
-
-```bash
-sudo usermod -aG docker $USER && newgrp docker
-# usermod -aG: appends (-a) the user to the specified group (-G) without removing from other groups
-# newgrp: activates the new group membership in the current shell session without requiring logout
-```
-
-Verified versions: Docker 29.5.3, Docker Compose v5.1.4.
-
-### 3.3 Piper Voice Model
-
-The Piper TTS engine requires two files per voice: a neural network model in ONNX format and a JSON configuration file. Both were downloaded from the official Rhasspy HuggingFace repository:
-
-```bash
-mkdir -p ~/inovatech-ai/data/piper-voices
-# -p: creates parent directories as needed, no error if they already exist
-
-cd ~/inovatech-ai/data/piper-voices
-
-wget -q --show-progress \
-  "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx" \
-  -O pt_BR-faber-medium.onnx
-# -q: quiet mode, suppresses verbose output
-# --show-progress: shows download progress bar even in quiet mode
-# -O: specifies the output filename
-
-wget -q --show-progress \
-  "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json" \
-  -O pt_BR-faber-medium.onnx.json
-```
-
-The selected voice is `pt_BR-faber-medium`: a Brazilian Portuguese male voice at medium quality, approximately 61 MB. It produces clear and intelligible speech from a CPU-only runtime.
-
-### 3.4 Secrets Management
-
-All secrets are stored in a `.env` file rather than in `docker-compose.yml`. The file is readable only by the owner:
-
-```bash
-chmod 600 ~/inovatech-ai/.env
-# 600: owner can read and write (6), group has no permissions (0), others have no permissions (0)
-```
-
-The `docker-compose.yml` references the file via the `env_file` directive, which causes Docker Compose to inject the variables into the container at runtime without the values ever appearing in the configuration file itself.
-
-### 3.5 Common Operational Commands
-
-```bash
-# start all services in detached (background) mode
-docker compose up -d
-
-# force recreate a specific container, reinjecting environment variables
-docker compose up -d --force-recreate backend
-# --force-recreate: tears down and recreates the container even if the image has not changed
-
-# view live logs of a specific service
-docker compose logs -f piper
-# -f: follow mode, streams new log lines in real time; exit with Ctrl+C
-
-# inspect environment variables inside a running container
-docker compose exec backend env | grep -E "PIPER|WHISPER"
-# exec: runs a command inside a running container
-# -E: enables extended regular expressions in grep, allowing the | (or) operator
-
-# check open TCP ports inside a container without installing tools
-docker compose exec piper cat /proc/net/tcp
-# /proc/net/tcp: virtual kernel file listing all TCP sockets; always available in Linux containers
-```
-
----
+chmod 400 ~/.ssh/inovatech-key
+# 400: owner read only; SSH refuses to use a private key with broader permissions
 
 ## 4. Bugs Encountered and Solutions
 
