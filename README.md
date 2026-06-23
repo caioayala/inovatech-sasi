@@ -13,12 +13,11 @@ This document describes the full architecture, infrastructure setup, bugs encoun
 1. [Project Overview](#1-project-overview)
 2. [Architecture](#2-architecture)
 3. [OpenStack Infrastructure](#3-openstack-infrastructure)
-4. [Docker and Application Setup](#4-docker-and-application-setup)
-5. [Bugs Encountered and Solutions](#5-bugs-encountered-and-solutions)
-6. [Performance Benchmarks](#6-performance-benchmarks)
-7. [Security Decisions](#7-security-decisions)
-8. [Pending Implementation](#8-pending-implementation)
-9. [Project Structure](#9-project-structure)
+4. [Bugs Encountered and Solutions](#4-bugs-encountered-and-solutions)
+5. [Performance Benchmarks](#5-performance-benchmarks)
+6. [Security Decisions](#6-security-decisions)
+7. [Pending Implementation](#7-pending-implementation)
+8. [Project Structure](#8-project-structure)
 
 ---
     
@@ -185,7 +184,7 @@ The author is aware that the more correct rule would restrict SSH ingress to spe
 
 Planned hardening:
 
-# replace current SSH rule (source 0.0.0.0/0) with:
+### replace current SSH rule (source 0.0.0.0/0) with:
 ALLOW IPv4 22/tcp from <developer_workstation_ip>/32
 ALLOW IPv4 22/tcp from <lab_admin_ip>/32
 
@@ -193,16 +192,16 @@ ALLOW IPv4 22/tcp from <lab_admin_ip>/32
 bash
 
 ssh -i ~/.ssh/inovatech-key ubuntu@192.168.201.133
-# -i: specifies the private key file for authentication
-# ubuntu: default user on Ubuntu cloud images
-# 192.168.201.133: floating IP, reachable only from inside the university network
-#                  or through WireGuard VPN (pending configuration)
+### -i: specifies the private key file for authentication
+### ubuntu: default user on Ubuntu cloud images
+### 192.168.201.133: floating IP, reachable only from inside the university network
+###                  or through WireGuard VPN (pending configuration)
 
 The key pair inovatech-key was generated during instance creation via OpenStack Horizon and downloaded once. It is stored at ~/.ssh/inovatech-key on the developer's workstation with permissions 400 (owner read-only), which is required by the SSH client:
 bash
 
 chmod 400 ~/.ssh/inovatech-key
-# 400: owner read only; SSH refuses to use a private key with broader permissions
+### 400: owner read only; SSH refuses to use a private key with broader permissions
 
 ## 4. Bugs Encountered and Solutions
 
